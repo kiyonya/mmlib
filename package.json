@@ -1,0 +1,24 @@
+{
+  "name": "mmlcore",
+  "version": "0.0.5",
+  "description": "",
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "axios": "^1.11.0",
+    "date-fns": "^4.1.0",
+    "iconv-lite": "^0.6.3",
+    "jsdom": "^26.1.0",
+    "node-downloader-helper": "^2.1.9",
+    "p-limit": "^6.2.0",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1"
+  }
+}
