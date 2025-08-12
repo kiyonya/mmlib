@@ -32,7 +32,10 @@ export default class MinecraftCollector {
   }
 
   async collect() {
-    //收集minecraft安装的运行库和静态资源
+
+    console.log('Minecraft原版收集喵报道！，接下来由咱负责收集游戏需要的资源喵！放心吧喵，咱可是很强大的喵')
+
+    //收集minecraft安装的运库和静态资源
 
     const assetJson = await this.getAssetsJson(this.versionJson.assetIndex.url)
 
@@ -40,12 +43,15 @@ export default class MinecraftCollector {
     fs.writeFileSync(assetsJsonPath, JSON.stringify(assetJson))
 
     let downloadTasks = []
+
+    console.log('收集运行库喵')
     //收集运行库
     let requiredLib = this.versionJson.libraries.filter((lib) => {
       return checkOSRules(lib?.rules)
     })
 
     for (let lib of requiredLib) {
+
       //收集artifact
       if (lib.downloads.artifact) {
         downloadTasks.push({
@@ -66,6 +72,7 @@ export default class MinecraftCollector {
         }
       }
     }
+    console.log('收集静态文件喵')
     //收集静态文件
     for (let asset of Object.values(assetJson.objects)) {
       let hash = asset.hash
@@ -77,12 +84,14 @@ export default class MinecraftCollector {
       })
     }
     //收集端
+    console.log('收集游戏端喵')
     downloadTasks.push({
       path: this.minecraftJarPath,
       url: this.versionJson.downloads[this.side].url,
       sha1: this.versionJson.downloads[this.side].sha1
     })
 
+    console.log('收集完成喵~期待下次再见喵——————')
     return downloadTasks
   }
 

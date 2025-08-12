@@ -13,9 +13,13 @@ import NeoForgeInstaller from '../Installer/NeoForgeInstaller.js';
 import FabricCollector from '../Collector/FabricCollector.js';
 import JavaInstaller from '../Installer/JavaInstaller.js';
 import AdmZip from 'adm-zip'
+import FabricInstaller from '../Installer/FabricInstaller.js';
+import LiteloaderCollector from '../Collector/LiteloaderCollector.js';
+import OptifineCollector from '../Collector/OptifineCollector.js';
+import OptifineInstaller from '../Installer/OptifineInstaller.js';
 
 export default class InstallMinecraft extends EventEmitter {
-    constructor({ java, version, versionPath, minecraftPath, name, side, modLoader = {}, addition = {} }) {
+    constructor({ java, version, versionPath, minecraftPath, name, side, modLoader = [], addition = [] }) {
         super()
 
         this.version = version
@@ -23,8 +27,8 @@ export default class InstallMinecraft extends EventEmitter {
         this.minecraftPath = minecraftPath
         this.name = name
         this.side = side || 'client'
-        this.modLoader = modLoader
-        this.addition = addition
+        this.modLoader = modLoader || []
+        this.addition = addition || []
 
         this.assetsPath = this.existify(path.join(minecraftPath, 'assets'))
         this.libPath = this.existify(path.join(minecraftPath, 'libraries'))
@@ -43,6 +47,8 @@ export default class InstallMinecraft extends EventEmitter {
 
         let versionJson = await this.getMinecraftVersionJson()
 
+        const isOldMinecraftGameArgumentsFormat = Boolean(versionJson?.minecraftArguments)
+
         let totalTasks = []
 
         const minecraftVanillaDownloads = await new MinecraftCollector({
@@ -54,15 +60,29 @@ export default class InstallMinecraft extends EventEmitter {
             side: this.side,
             minecraftJarPath: this.minecraftJarPath
         }).collect()
+
         totalTasks.push(...minecraftVanillaDownloads)
 
-        if (this.modLoader?.loader && this.modLoader?.version) {
+        //modloader检查
+
+        if (this.modLoader.some(i => i.loader === 'forge') && this.modLoader.some(i => i.loader === 'fabric')) {
+            throw new Error('Forge和Fabric不兼容')
+        }
+
+        if (this.modLoader.some(o => o.loader === 'fabric') && this.addition.some(i => i.name === 'optifine') && !this.addition.some(l => l.name === 'optifabric')) {
+            throw new Error('Fabric与Optifine必须安装Optifabric')
+        }
+
+        console.log('[Install] 模组加载器兼容性检查通过喵 可以进行喵！')
+
+        for (let loader of this.modLoader) {
             let modloaderInstallCollector = null
-            switch (this.modLoader.loader) {
+
+            switch (loader.loader) {
                 case 'forge':
                     modloaderInstallCollector = new ForgeCollector({
                         version: this.version,
-                        forgeVersion: this.modLoader.version,
+                        forgeVersion: loader.version,
                         versionPath: this.versionPath,
                         libPath: this.libPath,
                         versionJson: versionJson,
@@ -74,7 +94,7 @@ export default class InstallMinecraft extends EventEmitter {
                 case 'neoforge':
                     modloaderInstallCollector = new NeoForgeCollector({
                         version: this.version,
-                        neoForgeVersion: this.modLoader.version,
+                        neoForgeVersion: loader.version,
                         versionPath: this.versionPath,
                         libPath: this.libPath,
                         versionJson: versionJson,
@@ -84,20 +104,33 @@ export default class InstallMinecraft extends EventEmitter {
                     })
                     break
                 case 'fabric':
+
+                    let isFabricApi = (this.addition.filter(i => i.name === 'fabricapi'))?.[0] || null
+
                     modloaderInstallCollector = new FabricCollector({
                         version: this.version,
-                        fabricVersion: this.modLoader.version,
+                        fabricVersion: loader.version,
                         libPath: this.libPath,
                         //fabricapi由fabric收集器管辖
-                        fabricApiVersion: this.addition?.fabricApi || null,
+                        fabricApiVersion: isFabricApi ? isFabricApi.version : null,
                         versionPath: this.versionPath
                     })
                     break
-            }
+                case 'liteloader':
+
+                    modloaderInstallCollector = new LiteloaderCollector({
+                        version:this.version,
+                        liteloaderVersion:loader.version,
+                        versionPath:this.versionPath,
+                        side:this.side,
+                        libPath:this.libPath
+                    })
+                    break
+                }
 
 
             if (modloaderInstallCollector) {
-                if (this.modLoader.loader === 'forge') {
+                if (loader.loader === 'forge') {
                     const { isLegacyForge, downloadTasks } = await modloaderInstallCollector.collect()
                     totalTasks.push(...downloadTasks)
                     this.isLegacyForge = isLegacyForge
@@ -105,16 +138,35 @@ export default class InstallMinecraft extends EventEmitter {
                 else {
                     const downloadTasks = await modloaderInstallCollector.collect()
                     console.log(downloadTasks)
-
                     totalTasks.push(...downloadTasks)
                 }
-
             }
         }
 
-        if (this.addition?.optifine) {
 
+        for(let addi of this.addition){
+            let name = addi.name
+            let additionCollector = null
+            switch (name){
+                case 'optifine':    
+                    additionCollector = new OptifineCollector({
+                        version:this.version,
+                        optifinePatch:addi?.patch,
+                        optifineType:addi?.type,
+                        versionPath:this.versionPath
+                    })
+                break
+            }
+
+            if(additionCollector){
+                const task = await additionCollector.collect()
+                console.log(task)
+
+                totalTasks.push(...task)
+            }
         }
+
+
 
         //是否有java
         if (!this.java || !fs.existsSync(this.java)) {
@@ -142,7 +194,11 @@ export default class InstallMinecraft extends EventEmitter {
             this.java = path.join(installJavaPath, 'bin', 'java.exe')
         }
 
-        for (let task of [...totalTasks, ...extraDownloadTasks].filter(i => i.url)) {
+        let willDownload = [...totalTasks, ...extraDownloadTasks].filter(i => i.url)
+
+        console.log('即将开始下载',willDownload.length,'个文件')
+
+        for (let task of willDownload) {
             this.downloader.addTask(new DownloadTask(Mirror.getMirroredUrl(task.url, 'bmcl'), task.path, false, task.sha1))
         }
 
@@ -154,9 +210,36 @@ export default class InstallMinecraft extends EventEmitter {
 
         //下载后做的
 
-        if (this.modLoader?.loader && this.modLoader?.version) {
+        for(let addi of this.addition){
+            let name = addi.name
+            let additionInstaller = null
+            switch (name) {
+                case 'optifine' :
+                    additionInstaller = new OptifineInstaller({
+                        version:this.version,
+                        versionPath:this.versionPath,
+                        minecraftJarPath:this.minecraftJarPath,
+                        libPath:this.libPath,
+                        optifinePatch:addi?.patch,
+                        optifineType:addi?.type,
+                        java:this.java,
+                        versionJson:versionJson,
+                    })
+                
+                break
+            }
+
+            if(additionInstaller){
+                const additionBuildJson = await additionInstaller.install()
+                versionJson = this.combineVersionJson(versionJson, additionBuildJson)
+                console.log(versionJson)
+            }
+        }
+
+        for (let loader of this.modLoader) {
             let modloaderInstaller = null
-            switch (this.modLoader.loader) {
+
+            switch (loader.loader) {
                 case 'forge':
                     if (!this.isLegacyForge) {
                         modloaderInstaller = new ForgeInstaller({
@@ -184,11 +267,19 @@ export default class InstallMinecraft extends EventEmitter {
                         minecraftJarPath: this.minecraftJarPath
                     })
                     break
+                case 'fabric':
+                    modloaderInstaller = new FabricInstaller({
+                        version:this.version,
+                        fabricVersion:loader.version,
+                        libPath:this.libPath
+                    })
+                    break
             }
 
-
             if (modloaderInstaller) {
+
                 const extraJson = await modloaderInstaller.install()
+                //迭代组合
                 versionJson = this.combineVersionJson(versionJson, extraJson)
             }
         }
@@ -321,8 +412,11 @@ export default class InstallMinecraft extends EventEmitter {
             if (extraValue === undefined || extraValue === null) {
                 continue;
             }
+
             const baseValue = result[key];
+
             if (Array.isArray(extraValue)) {
+                //如果是数组 组合
                 if (Array.isArray(baseValue)) {
                     result[key] = [...baseValue, ...extraValue];
                 } else {
@@ -334,7 +428,16 @@ export default class InstallMinecraft extends EventEmitter {
                 } else {
                     result[key] = { ...extraValue };
                 }
-            } else {
+            }
+            else if(key === 'minecraftArguments'){
+                if(result['minecraftArguments'] && typeof result['minecraftArguments'] === 'string' && typeof extraJson['minecraftArguments'] === 'string'){
+                    const baseArray = result['minecraftArguments'].split(' ')
+                    const buildArray = extraJson['minecraftArguments'].split(' ')
+                    let combine = [...baseArray,...buildArray]
+                    result[key] = combine.join(' ')
+                }
+            }
+             else {
                 result[key] = extraValue;
             }
         }

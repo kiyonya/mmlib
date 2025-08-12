@@ -31,18 +31,18 @@ export default class DependenceChecker {
         })
 
         for (let lib of requiredLib) {
-            if (lib.name && !lib.downloads.classifiers) {
+            if (lib.name && !lib?.downloads?.classifiers) {
                 //从name解析而不是看path
                 let libfile = path.join(this.libPath, mavenToPath(lib.name))
-                let sha1 = lib.downloads.artifact.sha1
+                let sha1 = lib.downloads?.artifact?.sha1
                 checkTasks.push({
                     path: libfile,
-                    url: lib.downloads.artifact?.url || null,
+                    url: lib.downloads?.artifact?.url || null,
                     sha1: sha1 || null
                 })
             }
             //native库的情况检查 
-            if (lib.downloads.classifiers) {
+            if (lib?.downloads?.classifiers) {
                 let nativeIndexMap = lib?.natives[this.systemType] || lib?.natives[this.systemTypeWithArch]
                 if (nativeIndexMap) {
                     let nativeLib = lib.downloads.classifiers[nativeIndexMap]
@@ -95,7 +95,7 @@ export default class DependenceChecker {
             const ok = await this.isFileVaild(check?.path, check?.sha1)
             if (!ok) {
                 if (!check.url) {
-                    throw new Error('无法补全缺失文件', check.path)
+                    console.error('无法补全缺失文件', check.path)
                 }
                 else {
                     loses.push(check)
