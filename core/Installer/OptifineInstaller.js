@@ -26,7 +26,8 @@ export default class OptifineInstaller {
     }
 
     async install() {
-        console.log(this.optifineInstallerPath)
+        console.warn('%c准备构建Optifine 这一步会修改你的游戏jar','color:orange')
+
         if (!fs.existsSync(this.optifineInstallerPath)) {
             throw new Error('找不到Optifine安装器')
         }
@@ -104,6 +105,7 @@ export default class OptifineInstaller {
                     'optifine.OptiFineTweaker'
                 ]
             }
+            
             this.clear()
             return buildJson
         }

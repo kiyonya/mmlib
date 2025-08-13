@@ -9,10 +9,10 @@ const data = {
     minecraftPath: path.resolve('.minecraft'),
     name: '1.20.4-forge-47.4.4',
     side: 'client',
-    modLoader: {
-        loader: 'forge',
-        version: '47.4.4'
-    },
+    modLoader: [
+        {loader: 'forge',
+        version: '47.4.4'}
+    ],
     //附加内容
     // addition: {
     //     fabricApi: '0.92.6'

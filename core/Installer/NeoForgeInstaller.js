@@ -2,9 +2,10 @@ import AdmZip from 'adm-zip'
 import path from 'path'
 import fs from 'fs'
 import { argsArrayToObject, isMavenLikePath, mavenToPath } from '../utils/util.js'
-import { exec} from 'child_process'
+import { exec } from 'child_process'
 import os from 'os'
-export default class NeoForgeInstaller{
+import CommandExec from '../Ps/CommandExec.js'
+export default class NeoForgeInstaller {
   constructor({
     java,
     libPath,
@@ -37,7 +38,7 @@ export default class NeoForgeInstaller{
 
 
     const requireProcessors = installProfileJson.processors.filter((i) => {
-      if(i?.args?.includes('DOWNLOAD_MOJMAPS')){
+      if (i?.args?.includes('DOWNLOAD_MOJMAPS')) {
         return false
       }
       else if ((this.side === 'client' && !i?.sides) || i?.sides?.includes(this.side)) {
@@ -108,20 +109,20 @@ export default class NeoForgeInstaller{
       //bat结构 java -cp mainclass args
       let commandLine = `"${this.java}" -cp "${classpath.join(this.isWindows ? ';' : ':')}" ${mainClass} ${argsString}`
 
+      const output = await CommandExec.executeCommand(commandLine)
 
-      await this.runCommand(commandLine)
-        .then((output) => {
-          console.log(output)
-        })
-        .catch((error) => {
-          throw new Error('neoForge install error' + error)
-        })
+      if (output.error) {
+        throw new Error('neoforge install error' + error)
+      }
+      else {
+        console.log(output.output)
+      }
     }
 
 
     try {
       fs.rmSync(neoForgeInstallDir, { recursive: true, force: true })
-    } catch (e) {}
+    } catch (e) { }
 
 
     return neoForgeVersionJson
@@ -154,20 +155,5 @@ export default class NeoForgeInstaller{
     } catch (error) {
       return null
     }
-  }
-  async runCommand(commandLine) {
-    return new Promise((resolve, reject) => {
-      const child = exec(
-        commandLine,
-        {
-          shell: true,
-          maxBuffer: 10 * 1024 * 1024
-        },
-        (error, stdout, stderr) => {
-          if (error) reject(error)
-          else resolve(stdout)
-        }
-      )
-    })
   }
 }

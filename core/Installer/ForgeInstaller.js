@@ -2,8 +2,8 @@ import AdmZip from 'adm-zip'
 import path from 'path'
 import fs from 'fs'
 import { argsArrayToObject, isMavenLikePath, mavenToPath } from '../utils/util.js'
-import { exec} from 'child_process'
 import os from 'os'
+import CommandExec from '../Ps/CommandExec.js'
 export default class ForgeInstaller{
   constructor({
     java,
@@ -109,13 +109,14 @@ export default class ForgeInstaller{
       let commandLine = `"${this.java}" -cp "${classpath.join(this.isWindows ? ';' : ':')}" ${mainClass} ${argsString}`
 
 
-      await this.runCommand(commandLine)
-        .then((output) => {
-          console.log(output)
-        })
-        .catch((error) => {
-          throw new Error('forge install error' + error)
-        })
+      const output = await CommandExec.executeCommand(commandLine)
+
+      if(output.error){
+        throw new Error('forge install error' + error)
+      }
+      else{
+        console.log(output.output)
+      }
     }
 
 
@@ -154,20 +155,5 @@ export default class ForgeInstaller{
     } catch (error) {
       return null
     }
-  }
-  async runCommand(commandLine) {
-    return new Promise((resolve, reject) => {
-      const child = exec(
-        commandLine,
-        {
-          shell: true,
-          maxBuffer: 10 * 1024 * 1024
-        },
-        (error, stdout, stderr) => {
-          if (error) reject(error)
-          else resolve(stdout)
-        }
-      )
-    })
   }
 }

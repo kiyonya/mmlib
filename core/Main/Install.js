@@ -17,6 +17,8 @@ import FabricInstaller from '../Installer/FabricInstaller.js';
 import LiteloaderCollector from '../Collector/LiteloaderCollector.js';
 import OptifineCollector from '../Collector/OptifineCollector.js';
 import OptifineInstaller from '../Installer/OptifineInstaller.js';
+import QuiltCollector from '../Collector/QuiltCollector.js';
+import QuiltInstaller from '../Installer/QuiltInstaller.js';
 
 export default class InstallMinecraft extends EventEmitter {
     constructor({ java, version, versionPath, minecraftPath, name, side, modLoader = [], addition = [] }) {
@@ -119,14 +121,22 @@ export default class InstallMinecraft extends EventEmitter {
                 case 'liteloader':
 
                     modloaderInstallCollector = new LiteloaderCollector({
-                        version:this.version,
-                        liteloaderVersion:loader.version,
-                        versionPath:this.versionPath,
-                        side:this.side,
-                        libPath:this.libPath
+                        version: this.version,
+                        liteloaderVersion: loader.version,
+                        versionPath: this.versionPath,
+                        side: this.side,
+                        libPath: this.libPath
                     })
                     break
-                }
+                case 'quilt':
+
+                    modloaderInstallCollector = new QuiltCollector({
+                        version: this.version,
+                        libPath: this.libPath,
+                        quiltVersion: loader.version
+                    })
+                    break
+            }
 
 
             if (modloaderInstallCollector) {
@@ -142,31 +152,27 @@ export default class InstallMinecraft extends EventEmitter {
                 }
             }
         }
-
-
-        for(let addi of this.addition){
+        for (let addi of this.addition) {
             let name = addi.name
             let additionCollector = null
-            switch (name){
-                case 'optifine':    
+            switch (name) {
+                case 'optifine':
                     additionCollector = new OptifineCollector({
-                        version:this.version,
-                        optifinePatch:addi?.patch,
-                        optifineType:addi?.type,
-                        versionPath:this.versionPath
+                        version: this.version,
+                        optifinePatch: addi?.patch,
+                        optifineType: addi?.type,
+                        versionPath: this.versionPath
                     })
-                break
+                    break
             }
 
-            if(additionCollector){
+            if (additionCollector) {
                 const task = await additionCollector.collect()
                 console.log(task)
 
                 totalTasks.push(...task)
             }
         }
-
-
 
         //是否有java
         if (!this.java || !fs.existsSync(this.java)) {
@@ -196,7 +202,7 @@ export default class InstallMinecraft extends EventEmitter {
 
         let willDownload = [...totalTasks, ...extraDownloadTasks].filter(i => i.url)
 
-        console.log('即将开始下载',willDownload.length,'个文件')
+        console.log('即将开始下载', willDownload.length, '个文件')
 
         for (let task of willDownload) {
             this.downloader.addTask(new DownloadTask(Mirror.getMirroredUrl(task.url, 'bmcl'), task.path, false, task.sha1))
@@ -208,33 +214,28 @@ export default class InstallMinecraft extends EventEmitter {
 
         await this.downloader.start()
 
-        //下载后做的
 
-        for(let addi of this.addition){
-            let name = addi.name
-            let additionInstaller = null
-            switch (name) {
-                case 'optifine' :
-                    additionInstaller = new OptifineInstaller({
-                        version:this.version,
-                        versionPath:this.versionPath,
-                        minecraftJarPath:this.minecraftJarPath,
-                        libPath:this.libPath,
-                        optifinePatch:addi?.patch,
-                        optifineType:addi?.type,
-                        java:this.java,
-                        versionJson:versionJson,
-                    })
-                
-                break
-            }
+        let optifineBuildJson = null
 
-            if(additionInstaller){
-                const additionBuildJson = await additionInstaller.install()
-                versionJson = this.combineVersionJson(versionJson, additionBuildJson)
-                console.log(versionJson)
-            }
+        //安装optifine？
+        if (this.addition.some(i => i.name === 'optifine')) {
+            let opInstall = this.addition.find(i=>i.name === 'optifine')
+
+            const optifineInstaller = new OptifineInstaller({
+                version: this.version,
+                versionPath: this.versionPath,
+                minecraftJarPath: this.minecraftJarPath,
+                libPath: this.libPath,
+                optifinePatch: opInstall?.patch,
+                optifineType: opInstall?.type,
+                java: this.java,
+                versionJson: versionJson,
+                isOldMinecraftGameArgumentsFormat: isOldMinecraftGameArgumentsFormat
+            })
+            const buildJson = await optifineInstaller.install()
+            optifineBuildJson = buildJson
         }
+
 
         for (let loader of this.modLoader) {
             let modloaderInstaller = null
@@ -269,11 +270,16 @@ export default class InstallMinecraft extends EventEmitter {
                     break
                 case 'fabric':
                     modloaderInstaller = new FabricInstaller({
-                        version:this.version,
-                        fabricVersion:loader.version,
-                        libPath:this.libPath
+                        version: this.version,
+                        fabricVersion: loader.version,
+                        libPath: this.libPath
                     })
                     break
+                case 'quilt':
+                    modloaderInstaller = new QuiltInstaller({
+                        version: this.version,
+                        quiltVersion: loader.version
+                    })
             }
 
             if (modloaderInstaller) {
@@ -283,6 +289,26 @@ export default class InstallMinecraft extends EventEmitter {
                 versionJson = this.combineVersionJson(versionJson, extraJson)
             }
         }
+
+        //下载后做的
+        for (let addi of this.addition) {
+            let name = addi.name
+            let additionInstaller = null
+            switch (name) {
+
+            }
+            if (additionInstaller) {
+                const additionBuildJson = await additionInstaller.install()
+                versionJson = this.combineVersionJson(versionJson, additionBuildJson)
+                console.log(versionJson)
+            }
+        }
+
+        //最后合并optifine
+        if(optifineBuildJson){
+            versionJson = this.combineVersionJson(versionJson,optifineBuildJson)
+        }
+
 
         fs.writeFileSync(this.versionJsonPath, JSON.stringify(versionJson, null, 4), 'utf-8')
     }
@@ -407,6 +433,8 @@ export default class InstallMinecraft extends EventEmitter {
     }
 
     combineVersionJson(baseJson, extraJson) {
+
+
         const result = { ...baseJson };
         for (const [key, extraValue] of Object.entries(extraJson)) {
             if (extraValue === undefined || extraValue === null) {
@@ -429,15 +457,20 @@ export default class InstallMinecraft extends EventEmitter {
                     result[key] = { ...extraValue };
                 }
             }
-            else if(key === 'minecraftArguments'){
-                if(result['minecraftArguments'] && typeof result['minecraftArguments'] === 'string' && typeof extraJson['minecraftArguments'] === 'string'){
-                    const baseArray = result['minecraftArguments'].split(' ')
-                    const buildArray = extraJson['minecraftArguments'].split(' ')
-                    let combine = [...baseArray,...buildArray]
-                    result[key] = combine.join(' ')
+            else if (key === 'minecraftArguments') {
+                if (typeof baseValue === 'string' && typeof extraValue === 'string') {
+                    const baseArgs = this.parseArguments(baseValue);
+                    const extraArgs = this.parseArguments(extraValue);
+                    const combinedArgs = { ...baseArgs, ...extraArgs };
+
+                    // 转换回参数字符串
+                    result[key] = this.stringifyArguments(combinedArgs);
+
+                    console.log(result[key])
+                    1
                 }
             }
-             else {
+            else {
                 result[key] = extraValue;
             }
         }
@@ -483,5 +516,41 @@ export default class InstallMinecraft extends EventEmitter {
         });
 
         console.log(`解压完成: ${zipEntryPath} → ${targetDir}`);
+    }
+
+    /**
+    * 将 `--key value --flag` 格式的字符串解析为对象
+    * @example
+    * parseArguments("--username Steve --version 1.12.2 --demo")
+    * => { "--username": "Steve", "--version": "1.12.2", "--demo": "" }
+    */
+    parseArguments(argsString) {
+        const args = {};
+        const tokens = argsString.trim().split(/\s+/); // 按空格分割
+
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            if (token.startsWith("--")) {
+                const nextToken = tokens[i + 1];
+                if (nextToken && !nextToken.startsWith("--")) {
+                    args[token] = nextToken; // `--key value` 形式
+                    i++; // 跳过 value
+                } else {
+                    args[token] = ""; // `--flag` 形式（无值）
+                }
+            }
+        }
+        return args;
+    }
+    /**
+     * 将对象转换回 `--key value` 格式的字符串
+     * @example
+     * stringifyArguments({ "--username": "Steve", "--version": "1.12.2", "--demo": "" })
+     * => "--username Steve --version 1.12.2 --demo"
+     */
+    stringifyArguments(argsObj) {
+        return Object.entries(argsObj)
+            .map(([key, value]) => value ? `${key} ${value}` : key)
+            .join(" ");
     }
 }

@@ -31,32 +31,45 @@ export default class DependenceChecker {
         })
 
         for (let lib of requiredLib) {
-            if (lib.name && !lib?.downloads?.classifiers) {
-                //从name解析而不是看path
-                let libfile = path.join(this.libPath, mavenToPath(lib.name))
-                let sha1 = lib.downloads?.artifact?.sha1
-                checkTasks.push({
-                    path: libfile,
-                    url: lib.downloads?.artifact?.url || null,
-                    sha1: sha1 || null
-                })
-            }
-            //native库的情况检查 
-            if (lib?.downloads?.classifiers) {
-                let nativeIndexMap = lib?.natives[this.systemType] || lib?.natives[this.systemTypeWithArch]
-                if (nativeIndexMap) {
-                    let nativeLib = lib.downloads.classifiers[nativeIndexMap]
-                    if (nativeLib) {
-                        let sha1 = nativeLib?.sha1
-                        //要处理体系架构的问题
-                        let file = path.join(this.libPath, nativeLib?.path)
-                        checkTasks.push({
-                            path: file,
-                            url: nativeLib?.url,
-                            sha1: sha1
-                        })
+            if (!lib.name) { continue }
+
+            if (lib?.downloads) {
+                if (lib?.downloads?.artifact) {
+                    //从name解析而不是看path
+                    let libfile = path.join(this.libPath, mavenToPath(lib.name))
+                    let sha1 = lib.downloads?.artifact?.sha1
+                    checkTasks.push({
+                        path: libfile,
+                        url: lib.downloads?.artifact?.url || null,
+                        sha1: sha1 || null
+                    })
+                }
+                //native库的情况检查 
+                if (lib?.downloads?.classifiers) {
+                    let nativeIndexMap = lib?.natives[this.systemType] || lib?.natives[this.systemTypeWithArch]
+                    if (nativeIndexMap) {
+                        let nativeLib = lib.downloads.classifiers[nativeIndexMap]
+                        if (nativeLib) {
+                            let sha1 = nativeLib?.sha1
+                            //要处理体系架构的问题
+                            let file = path.join(this.libPath, nativeLib?.path)
+                            checkTasks.push({
+                                path: file,
+                                url: nativeLib?.url,
+                                sha1: sha1
+                            })
+                        }
                     }
                 }
+            }
+            //兼容
+            else {
+                let libfile = path.join(this.libPath, mavenToPath(lib.name))
+                checkTasks.push({
+                    path: libfile,
+                    url: lib?.url ? ((lib.url + mavenToPath(lib?.name)).replaceAll('\\', '/')) : '',
+                    sha1: lib?.hashes?.sha1 || null
+                })
             }
         }
 

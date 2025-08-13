@@ -18,7 +18,8 @@ export default class CommandExec {
             const child = spawn(command, {
                 shell: true,
                 cwd: cwd,
-                stdio: redirectOutput ? 'pipe' : 'inherit'
+                stdio: redirectOutput ? 'pipe' : 'inherit',
+                maxBuffer: 10 * 1024 * 1024
             });
 
             let output = '';
